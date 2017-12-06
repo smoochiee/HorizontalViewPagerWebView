@@ -1,24 +1,36 @@
 package com.app.moose.horizontalviewpagerwebview;
 
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
-
+import android.app.DownloadManager;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.graphics.Bitmap;
+import android.net.Uri;
+import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
-import android.os.Bundle;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-
+import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
+import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 import com.smooz_app.moose.horizontalviewpagerwebview.R;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements  ParentRequestInterface {
 
@@ -97,6 +109,8 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
         CustomViewPager viewpager;
         MainActivity parentActivity;
 
+
+
         public void setActivity(MainActivity activity) {
             this.activity = activity;
         }
@@ -109,6 +123,7 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
 
         }
 
+
         /**
          * Returns a new instance of this fragment for the given section
          * number.
@@ -118,36 +133,43 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             Bundle args = new Bundle();
             args.putInt(ARG_SECTION_NUMBER, sectionNumber);
             fragment.setArguments(args);
+
+
             return fragment;
         }
 
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
+
             Bundle arguments = getArguments();
             sectionNumber = arguments.getInt(ARG_SECTION_NUMBER);
 
             parentActivity = (MainActivity) getActivity();
             View rootView = inflater.inflate(R.layout.fragment_main, container, false);
-            CustomWebView webView=rootView.findViewById(R.id.webView);
+            final CustomWebView webView = rootView.findViewById(R.id.webView);
+
+
             webView.setFragment(this);
+            AdBlocker.init(this);
             //load test url
-            String url="";
+            String url = "";
             switch (sectionNumber) {
                 case 1:
-                    url="https://www.google.com/search?q=news";
+                    url = "https://www.phcorner.net/forums";
                     break;
                 case 2:
-                    url="https://www.google.com/search?q=random";
+                    url = "http://www.phcorner.net";
                     break;
                 case 3:
-                    url="https://www.amazon.com/Hoover-UH20040-QuickVac-Bagless-Upright/dp/B004N64GH0/ref=br_dig_pdt-1?pf_rd_m=ATVPDKIKX0DER&pf_rd_s=&pf_rd_r=0MZDRMZPKF0R2NT18GQ1&pf_rd_t=36701&pf_rd_p=abc0a418-efdb-4eb8-923e-3437111895cf&pf_rd_i=desktop";
+                    url = "https://www.phcorner.net/activity";
                     break;
             }
 
-            WebSettings settings=webView.getSettings();
+
+            WebSettings settings = webView.getSettings();
             webView.setWebChromeClient(new WebChromeClient());
-            webView.setWebViewClient(new WebViewClient());
+            //webView.setWebViewClient(new WebViewClient());
             settings.setJavaScriptEnabled(true);
             webView.setScrollContainer(false);
             webView.setVerticalScrollBarEnabled(false);
@@ -158,9 +180,89 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             settings.setLoadWithOverviewMode(true);
             settings.setUseWideViewPort(true);
             webView.loadUrl(url);
+
+
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    super.onPageStarted(view, url, favicon);
+                    // webView.loadUrl(url);
+                    Toast.makeText(getContext(), "test if working", Toast.LENGTH_SHORT).show();
+
+            }
+
+                private Map<String, Boolean> loadedUrls = new HashMap<>();
+
+                @SuppressWarnings("deprecation")
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                    boolean ad;
+                    if (!loadedUrls.containsKey(url)) {
+                        ad = AdBlocker.isAd(url);
+                        loadedUrls.put(url, ad);
+                    } else {
+                        ad = loadedUrls.get(url);
+                    }
+                    return ad ? AdBlocker.createEmptyResource() :
+                            super.shouldInterceptRequest(view, url);
+                }
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                  //  webView.loadUrl(url);
+                }
+            });
+            webView.setDownloadListener(new DownloadListener() {
+                @Override
+                public void onDownloadStart(final String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
+                    AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                    builder.setMessage("Unable to view " + mimetype + ". Download the file instead?")
+                            .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    DownloadManager dm = (DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
+                                    dm.enqueue(new DownloadManager.Request(Uri.parse(url)));
+
+                                }
+                            }).setNegativeButton("No", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+
+                        }
+                    }).show();
+                }
+            });
+            webView.setOnKeyListener(new View.OnKeyListener() {
+                @Override
+                public boolean onKey(View v, int keyCode, KeyEvent event) {
+                    if(event.getAction() == KeyEvent.ACTION_DOWN)
+                    {
+                        WebView webView = (WebView) v;
+
+                        switch(keyCode)
+                        {
+                            case KeyEvent.KEYCODE_BACK:
+                                if(webView.canGoBack())
+                                {
+                                    webView.goBack();
+                                    return true;
+                                }
+                                break;
+                        }
+                    }
+
+
+                    return false;
+                }
+            });
+
+
+
+
+
+
             return rootView;
         }
-
 
 
 
