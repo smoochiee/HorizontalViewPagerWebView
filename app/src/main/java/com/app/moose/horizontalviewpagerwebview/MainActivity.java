@@ -1,69 +1,89 @@
-package com.app.moose.horizontalviewpagerwebview;
+package smoochie.multitaskphc;
 
 import android.app.DownloadManager;
 import android.content.Context;
-import android.content.DialogInterface;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
+import android.support.annotation.NonNull;
+import android.support.design.widget.NavigationView;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.support.v7.app.AlertDialog;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
-import android.webkit.WebChromeClient;
+import android.webkit.URLUtil;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
-import com.smooz_app.moose.horizontalviewpagerwebview.R;
+import com.yalantis.phoenix.PullToRefreshView;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class MainActivity extends AppCompatActivity implements  ParentRequestInterface {
+public class MainActivity extends AppCompatActivity implements  ParentRequestInterface, NavigationView.OnNavigationItemSelectedListener {
 
-    /**
-     * The {@link android.support.v4.view.PagerAdapter} that will provide
-     * fragments for each of the sections. We use a
-     * {@link FragmentPagerAdapter} derivative, which will keep every
-     * loaded fragment in memory. If this becomes too memory intensive, it
-     * may be best to switch to a
-     * {@link android.support.v4.app.FragmentStatePagerAdapter}.
-     */
+
+
     private SectionsPagerAdapter mSectionsPagerAdapter;
 
-    /**
-     * The {@link ViewPager} that will host the section contents.
-     */
+
     private CustomViewPager mViewPager;
+    private CustomWebView webView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_drawer);
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        // Create the adapter that will return a fragment for each of the three
-        // primary sections of the activity.
+
         mSectionsPagerAdapter = new SectionsPagerAdapter(getSupportFragmentManager(),mViewPager, this);
 
-        // Set up the ViewPager with the sections adapter.
+
         mViewPager = (CustomViewPager) findViewById(R.id.container);
         mViewPager.setAdapter(mSectionsPagerAdapter);
         mViewPager.setOffscreenPageLimit(2);
+
+
+        TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
+
+        mViewPager.addOnPageChangeListener(new TabLayout.TabLayoutOnPageChangeListener(tabLayout));
+        tabLayout.addOnTabSelectedListener(new TabLayout.ViewPagerOnTabSelectedListener(mViewPager));
+
+
+        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
+        drawer.setDrawerListener(toggle);
+        toggle.syncState();
+
+
+        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        navigationView.setNavigationItemSelectedListener(this);
+
+
+
+
+
 
     }
 
@@ -84,6 +104,7 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
+            webView.loadUrl("http://facebook.com");
             return true;
         }
 
@@ -94,20 +115,32 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
     public void setViewPagerStatus(Boolean b) {
         mViewPager.setPagingEnabled(b);
     }
+    @SuppressWarnings("StatementWithEmptyBody")
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
 
-    /**
-     * A placeholder fragment containing a simple view.
-     */
+        int id = item.getItemId();
+
+        if (id == R.id.action_settings) {
+            // Handle the camera action
+            webView.loadUrl("https://m.facebook.com/");
+        }
+
+        return false;
+    }
+
     public static class PlaceholderFragment extends Fragment {
         /**
          * The fragment argument representing the section number for this
          * fragment.
          */
         private static final String ARG_SECTION_NUMBER = "section_number";
+        String current_page_url = "";
         int sectionNumber;
         MainActivity activity;
         CustomViewPager viewpager;
         MainActivity parentActivity;
+        private PullToRefreshView mPullToRefreshView;
 
 
 
@@ -122,8 +155,6 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
         public PlaceholderFragment() {
 
         }
-
-
         /**
          * Returns a new instance of this fragment for the given section
          * number.
@@ -132,7 +163,9 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             PlaceholderFragment fragment = new PlaceholderFragment();
             Bundle args = new Bundle();
             args.putInt(ARG_SECTION_NUMBER, sectionNumber);
+
             fragment.setArguments(args);
+
 
 
             return fragment;
@@ -144,31 +177,29 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
 
             Bundle arguments = getArguments();
             sectionNumber = arguments.getInt(ARG_SECTION_NUMBER);
-
             parentActivity = (MainActivity) getActivity();
             View rootView = inflater.inflate(R.layout.fragment_main, container, false);
+            mPullToRefreshView = (PullToRefreshView) rootView.findViewById(R.id.pull_to_refresh);
             final CustomWebView webView = rootView.findViewById(R.id.webView);
-
-
             webView.setFragment(this);
             AdBlocker.init(this);
             //load test url
-            String url = "";
+            final String[] current_page_url = {""};
             switch (sectionNumber) {
                 case 1:
-                    url = "https://www.phcorner.net/forums";
+                    current_page_url[0] = "https://www.phcorner.net/forums";
                     break;
                 case 2:
-                    url = "http://www.phcorner.net";
+                    current_page_url[0] = "http://www.phcorner.net";
                     break;
                 case 3:
-                    url = "https://www.phcorner.net/activity";
+                    current_page_url[0] = "https://www.phcorner.net/activity";
                     break;
             }
 
 
             WebSettings settings = webView.getSettings();
-            webView.setWebChromeClient(new WebChromeClient());
+           // webView.setWebChromeClient(new WebChromeClient());
             //webView.setWebViewClient(new WebViewClient());
             settings.setJavaScriptEnabled(true);
             webView.setScrollContainer(false);
@@ -179,17 +210,32 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             settings.setDisplayZoomControls(false);
             settings.setLoadWithOverviewMode(true);
             settings.setUseWideViewPort(true);
-            webView.loadUrl(url);
+            webView.loadUrl(current_page_url[0]);
+            if (getActivity().getIntent().getExtras() != null) {
+                current_page_url[0] =getActivity().getIntent().getStringExtra("url");
+            }
 
+
+            final String[] finalCurrent_page_url = {current_page_url[0]};
+            mPullToRefreshView.setOnRefreshListener(new PullToRefreshView.OnRefreshListener() {
+
+
+                @Override
+                public void onRefresh() {
+                    mPullToRefreshView.setRefreshing(false);
+                    webView.loadUrl(finalCurrent_page_url[0]);
+                }
+            });
 
             webView.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onPageStarted(WebView view, String url, Bitmap favicon) {
                     super.onPageStarted(view, url, favicon);
-                    // webView.loadUrl(url);
+                    finalCurrent_page_url[0] = url;
+
                     Toast.makeText(getContext(), "test if working", Toast.LENGTH_SHORT).show();
 
-            }
+                }
 
                 private Map<String, Boolean> loadedUrls = new HashMap<>();
 
@@ -209,53 +255,56 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                  //  webView.loadUrl(url);
+                    //  webView.loadUrl(url);
                 }
             });
             webView.setDownloadListener(new DownloadListener() {
                 @Override
-                public void onDownloadStart(final String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
-                    AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-                    builder.setMessage("Unable to view " + mimetype + ". Download the file instead?")
-                            .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    DownloadManager dm = (DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
-                                    dm.enqueue(new DownloadManager.Request(Uri.parse(url)));
+                public void onDownloadStart(String url, String userAgent, String contentDisposition, String
+                        mimeType, long contentLength) {
 
-                                }
-                            }).setNegativeButton("No", new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
 
-                        }
-                    }).show();
-                }
-            });
-            webView.setOnKeyListener(new View.OnKeyListener() {
-                @Override
-                public boolean onKey(View v, int keyCode, KeyEvent event) {
-                    if(event.getAction() == KeyEvent.ACTION_DOWN)
-                    {
-                        WebView webView = (WebView) v;
 
-                        switch(keyCode)
-                        {
-                            case KeyEvent.KEYCODE_BACK:
-                                if(webView.canGoBack())
-                                {
-                                    webView.goBack();
-                                    return true;
-                                }
-                                break;
+                    try {
+                        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                        request.setMimeType(mimeType);
+                        //------------------------COOKIE!!------------------------
+                        String cookies = CookieManager.getInstance().getCookie(url);
+                        request.addRequestHeader("cookie", cookies);
+                        //------------------------COOKIE!!------------------------
+                        request.addRequestHeader("User-Agent", userAgent);
+                        request.setDescription("Downloading file...");
+                        request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
+                        request.allowScanningByMediaScanner();
+                        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimeType));
+                        DownloadManager dm = (DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
+                        dm.enqueue(request);
+                        Toast.makeText(getContext(), "Downloading File", Toast.LENGTH_LONG).show();
+                    } catch (Exception e) {
+                        if (ContextCompat.checkSelfPermission(getContext(),
+                                android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                != PackageManager.PERMISSION_GRANTED) {
+                            // Should we show an explanation?
+                            if (ActivityCompat.shouldShowRequestPermissionRationale(getActivity(),
+                                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+
+                                ActivityCompat.requestPermissions(getActivity(), new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                        110);
+                            } else {
+
+                                ActivityCompat.requestPermissions(getActivity(), new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                        110);
+                            }
                         }
                     }
 
 
-                    return false;
+
+
+
                 }
             });
-
 
 
 
@@ -266,26 +315,21 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
 
 
 
-        public void setViewPager(boolean b) {
-            parentActivity.setViewPagerStatus(b);
-        }
+    public void setViewPager(boolean b) {
+        parentActivity.setViewPagerStatus(b);
     }
+}
 
-    /**
-     * A {@link FragmentPagerAdapter} that returns a fragment corresponding to
-     * one of the sections/tabs/pages.
-     */
+
     public class SectionsPagerAdapter extends FragmentPagerAdapter {
 
         CustomViewPager viewPager;
         MainActivity activity;
         public SectionsPagerAdapter(FragmentManager fm, CustomViewPager viewPager, MainActivity activity) {
             super(fm);
-            this.viewPager=viewPager;
-            this.activity=activity;
-
+            this.viewPager = viewPager;
+            this.activity = activity;
         }
-
         @Override
         public Fragment getItem(int position) {
             // getItem is called to instantiate the fragment for the given page.
