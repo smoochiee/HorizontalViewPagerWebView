@@ -1,12 +1,17 @@
 package smoochie.multitaskphc;
 
+import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.design.widget.NavigationView;
 import android.support.design.widget.TabLayout;
@@ -14,11 +19,13 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -27,6 +34,8 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.URLUtil;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -35,6 +44,10 @@ import android.widget.Toast;
 
 import com.yalantis.phoenix.PullToRefreshView;
 
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -46,7 +59,8 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
 
 
     private CustomViewPager mViewPager;
-    private CustomWebView webView;
+
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,14 +89,8 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
                 this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
         drawer.setDrawerListener(toggle);
         toggle.syncState();
-
-
         NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
-
-
-
-
 
 
     }
@@ -100,30 +108,42 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+      //  int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            webView.loadUrl("http://facebook.com");
-            return true;
-        }
+       // if (id == R.id.action_settings) {
 
-        return super.onOptionsItemSelected(item);
+
+            return true;
+      //  }
+
+      //  return super.onOptionsItemSelected(item);
     }
 
     @Override
     public void setViewPagerStatus(Boolean b) {
         mViewPager.setPagingEnabled(b);
     }
+
+
     @SuppressWarnings("StatementWithEmptyBody")
     @Override
     public boolean onNavigationItemSelected(@NonNull MenuItem item) {
 
         int id = item.getItemId();
-
+        PlaceholderFragment placeholderFragment = null;
+        Bundle bundle = new Bundle();
         if (id == R.id.action_settings) {
             // Handle the camera action
-            webView.loadUrl("https://m.facebook.com/");
+            bundle.putString("url","https://www.facebook.com");
+            placeholderFragment = new PlaceholderFragment();
+            placeholderFragment.setArguments(bundle);
+
+        }
+        if (placeholderFragment == null) {
+            FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+            ft.replace(R.id.container, placeholderFragment);
+            ft.commit();
         }
 
         return false;
@@ -135,15 +155,60 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
          * fragment.
          */
         private static final String ARG_SECTION_NUMBER = "section_number";
-        String current_page_url = "";
+        private static String ARG_URL;
+        String current_page_url;
         int sectionNumber;
         MainActivity activity;
         CustomViewPager viewpager;
         MainActivity parentActivity;
+        ////////////////////////////
+        private String mCM;
+        private ValueCallback<Uri> mUM;
+        private ValueCallback<Uri[]> mUMA;
+        private final static int FCR = 1;
+/////////////////////////////////////
+
         private PullToRefreshView mPullToRefreshView;
 
 
+        @Override
+        public void onActivityResult(int requestCode, int resultCode, Intent intent) {
+            super.onActivityResult(requestCode, resultCode, intent);
+            if (Build.VERSION.SDK_INT >= 21) {
+                Uri[] results = null;
+                //Check if response is positive
+                if (resultCode == Activity.RESULT_OK) {
+                    if (requestCode == FCR) {
+                        if (null == mUMA) {
+                            return;
+                        }
+                        if (intent == null || intent.getData() == null) {
+                            //Capture Photo if no image available
+                            if (mCM != null) {
+                                results = new Uri[]{Uri.parse(mCM)};
+                            }
+                        } else {
+                            String dataString = intent.getDataString();
+                            if (dataString != null) {
+                                results = new Uri[]{Uri.parse(dataString)};
+                            }
+                        }
+                    }
+                }
+                mUMA.onReceiveValue(results);
+                mUMA = null;
+            } else {
+                if (requestCode == FCR) {
+                    if (null == mUM) return;
+                    Uri result = intent == null || resultCode != RESULT_OK ? null : intent.getData();
+                    mUM.onReceiveValue(result);
+                    mUM = null;
+                }
+            }
+        }
 
+
+        //////////////////////////////////////////////////////////////////////////////////////////
         public void setActivity(MainActivity activity) {
             this.activity = activity;
         }
@@ -155,6 +220,7 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
         public PlaceholderFragment() {
 
         }
+
         /**
          * Returns a new instance of this fragment for the given section
          * number.
@@ -163,9 +229,7 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             PlaceholderFragment fragment = new PlaceholderFragment();
             Bundle args = new Bundle();
             args.putInt(ARG_SECTION_NUMBER, sectionNumber);
-
             fragment.setArguments(args);
-
 
 
             return fragment;
@@ -178,10 +242,13 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             Bundle arguments = getArguments();
             sectionNumber = arguments.getInt(ARG_SECTION_NUMBER);
             parentActivity = (MainActivity) getActivity();
+
             View rootView = inflater.inflate(R.layout.fragment_main, container, false);
             mPullToRefreshView = (PullToRefreshView) rootView.findViewById(R.id.pull_to_refresh);
             final CustomWebView webView = rootView.findViewById(R.id.webView);
             webView.setFragment(this);
+
+            current_page_url = this.getArguments().getString("url");
             AdBlocker.init(this);
             //load test url
             final String[] current_page_url = {""};
@@ -199,7 +266,7 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
 
 
             WebSettings settings = webView.getSettings();
-           // webView.setWebChromeClient(new WebChromeClient());
+            // webView.setWebChromeClient(new WebChromeClient());
             //webView.setWebViewClient(new WebViewClient());
             settings.setJavaScriptEnabled(true);
             webView.setScrollContainer(false);
@@ -212,9 +279,8 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
             settings.setUseWideViewPort(true);
             webView.loadUrl(current_page_url[0]);
             if (getActivity().getIntent().getExtras() != null) {
-                current_page_url[0] =getActivity().getIntent().getStringExtra("url");
+                current_page_url[0] = getActivity().getIntent().getStringExtra("url");
             }
-
 
             final String[] finalCurrent_page_url = {current_page_url[0]};
             mPullToRefreshView.setOnRefreshListener(new PullToRefreshView.OnRefreshListener() {
@@ -226,6 +292,89 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
                     webView.loadUrl(finalCurrent_page_url[0]);
                 }
             });
+            webView.setWebChromeClient(new WebChromeClient() {
+
+                                           //For Android 3.0+
+                                           public void openFileChooser(ValueCallback<Uri> uploadMsg) {
+                                               mUM = uploadMsg;
+                                               Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                                               i.addCategory(Intent.CATEGORY_OPENABLE);
+                                               i.setType("*/*");
+                                               getActivity().startActivityForResult(Intent.createChooser(i, "File Chooser"), FCR);
+                                           }
+
+                                           public void openFileChooser(ValueCallback uploadMsg, String acceptType) {
+                                               mUM = uploadMsg;
+                                               Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                                               i.addCategory(Intent.CATEGORY_OPENABLE);
+                                               i.setType("*/*");
+                                               getActivity().startActivityForResult(
+                                                       Intent.createChooser(i, "File Browser"),
+                                                       FCR);
+                                           }
+
+                                           public void openFileChooser(ValueCallback<Uri> uploadMsg, String acceptType, String capture) {
+                                               mUM = uploadMsg;
+                                               Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                                               i.addCategory(Intent.CATEGORY_OPENABLE);
+                                               i.setType("*/*");
+                                               getActivity().startActivityForResult(Intent.createChooser(i, "File Chooser"), FCR);
+                                           }
+
+                                           public boolean onShowFileChooser(
+                                                   WebView webView, ValueCallback<Uri[]> filePathCallback,
+                                                   WebChromeClient.FileChooserParams fileChooserParams) {
+                                               if (mUMA != null) {
+                                                   mUMA.onReceiveValue(null);
+                                               }
+                                               mUMA = filePathCallback;
+                                               Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                                               if (takePictureIntent.resolveActivity(getActivity().getPackageManager()) != null) {
+                                                   File photoFile = null;
+                                                   try {
+                                                       photoFile = createImageFile();
+                                                       takePictureIntent.putExtra("PhotoPath", mCM);
+                                                   } catch (IOException ex) {
+
+                                                   }
+                                                   if (photoFile != null) {
+                                                       mCM = "file:" + photoFile.getAbsolutePath();
+                                                       takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(photoFile));
+                                                   } else {
+                                                       takePictureIntent = null;
+                                                   }
+                                               }
+                                               Intent contentSelectionIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                                               contentSelectionIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                                               contentSelectionIntent.setType("*/*");
+                                               Intent[] intentArray;
+                                               if (takePictureIntent != null) {
+                                                   intentArray = new Intent[]{takePictureIntent};
+                                               } else {
+                                                   intentArray = new Intent[0];
+                                               }
+
+                                               Intent chooserIntent = new Intent(Intent.ACTION_CHOOSER);
+                                               chooserIntent.putExtra(Intent.EXTRA_INTENT, contentSelectionIntent);
+                                               chooserIntent.putExtra(Intent.EXTRA_TITLE, "Image Chooser");
+                                               chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray);
+                                               startActivityForResult(chooserIntent, FCR);
+                                               return true;
+
+                                           }
+
+
+                                           // Create an image file
+                                           private File createImageFile() throws IOException {
+                                               @SuppressLint("SimpleDateFormat") String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+                                               String imageFileName = "img_" + timeStamp + "_";
+                                               File storageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                                               return File.createTempFile(imageFileName, ".jpg", storageDir);
+
+                                           }
+                                       });
+
+
 
             webView.setWebViewClient(new WebViewClient() {
                 @Override
@@ -233,7 +382,7 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
                     super.onPageStarted(view, url, favicon);
                     finalCurrent_page_url[0] = url;
 
-                    Toast.makeText(getContext(), "test if working", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "Loading", Toast.LENGTH_SHORT).show();
 
                 }
 
@@ -298,11 +447,29 @@ public class MainActivity extends AppCompatActivity implements  ParentRequestInt
                             }
                         }
                     }
+                }
+            });
+            webView.setOnKeyListener(new View.OnKeyListener() {
+                @Override
+                public boolean onKey(View v, int keyCode, KeyEvent event) {
+                    if(event.getAction() == KeyEvent.ACTION_DOWN)
+                    {
+                        WebView webView = (WebView) v;
+
+                        switch(keyCode)
+                        {
+                            case KeyEvent.KEYCODE_BACK:
+                                if(webView.canGoBack())
+                                {
+                                    webView.goBack();
+                                    return true;
+                                }
+                                break;
+                        }
+                    }
 
 
-
-
-
+                    return false;
                 }
             });
 
